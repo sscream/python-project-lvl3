@@ -10,7 +10,7 @@ install:
 	poetry install
 
 coverage:
-	poetry run coverage run --source=page_loader -m pytest tests
+	poetry run coverage run --source=page_loader --omit=page_loader/scripts/* -m pytest tests
 	poetry run coverage xml
 
 build:
