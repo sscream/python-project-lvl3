@@ -15,6 +15,7 @@ page-loader = "page_loader.scripts.page_loader:main"
 python = "^3.7"
 requests = "^2.25.0"
 coverage = "^5.3"
+beautifulsoup4 = "^4.9.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.2"
