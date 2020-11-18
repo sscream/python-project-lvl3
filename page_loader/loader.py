@@ -6,6 +6,10 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from .logger import get_logger
+
+logger = get_logger(__name__)
+
 FILES_FOLDER_POSTFIX = '_files'
 FILENAME_MAX_LENGTH = 255
 
@@ -25,9 +29,16 @@ def download_files(
     file_folder_name = path.split(file_folder_path)[-1]
 
     for element in soup.find_all(tag):
+        if not element.has_attr(src_attribute):
+            logger.info(
+                'Element "%s" has no source attribute, skipping', element
+            )
+            continue
+
         absolute_url = urljoin(page_url, element[src_attribute])
 
         if not is_local_resource(page_url, absolute_url):
+            logger.info('Element "%s" is external, skipping', element)
             continue
 
         parsed_url = urlparse(absolute_url)
@@ -51,6 +62,7 @@ def download_files(
 
         with open(file_path, mode) as file:
             file.write(file_data)
+            logger.info('Saving asset %s', file_path)
 
 
 def download(url, destination):
@@ -74,5 +86,7 @@ def download(url, destination):
         download_files(url, soup, 'script', 'src', file_folder_path)
 
         file.write(soup.prettify())
+
+        logger.info('Saving page %s', output_file_path)
 
     return output_file_path
