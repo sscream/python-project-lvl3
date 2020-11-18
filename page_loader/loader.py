@@ -1,7 +1,7 @@
 import pathlib
 import re
 from os import path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,15 +15,53 @@ def sanitize_string(string):
     return f"{re.sub(pattern, '-', string)}"
 
 
-def remove_schema_from_url(url):
-    return url.split('//')[-1]
+def is_local_resource(page_url, resource_url):
+    return urlparse(page_url).netloc == urlparse(resource_url).netloc
+
+
+def download_files(
+    page_url, soup, tag, src_attribute, file_folder_path, is_binary=False
+):
+    file_folder_name = path.split(file_folder_path)[-1]
+
+    for element in soup.find_all(tag):
+        absolute_url = urljoin(page_url, element[src_attribute])
+
+        if not is_local_resource(page_url, absolute_url):
+            continue
+
+        parsed_url = urlparse(absolute_url)
+        response = requests.get(absolute_url)
+
+        if is_binary:
+            file_data = response.content
+        else:
+            file_data = response.text
+
+        file_path, extension = path.splitext(
+            f'{parsed_url.netloc}{parsed_url.path}'
+        )
+        file_name = f'{sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
+                    f'{extension}'
+        file_path = path.join(file_folder_path, file_name)
+
+        element[src_attribute] = path.join(file_folder_name, file_name)
+
+        mode = 'bw' if is_binary else 'w'
+
+        with open(file_path, mode) as file:
+            file.write(file_data)
 
 
 def download(url, destination):
-    site_name = sanitize_string(remove_schema_from_url(url))
+    parsed_url = urlparse(url)
+    url_without_scheme = f'{parsed_url.netloc}{parsed_url.path}'
+    site_name = sanitize_string(url_without_scheme)
     output_file_path = f'{path.join(destination, site_name)}.html'
-    file_folder_name = f'{site_name}{FILES_FOLDER_POSTFIX}'
-    file_folder_path = path.join(destination, file_folder_name)
+    file_folder_path = path.join(
+        destination,
+        f'{site_name}{FILES_FOLDER_POSTFIX}'
+    )
 
     pathlib.Path(file_folder_path).mkdir(parents=True)
 
@@ -31,18 +69,9 @@ def download(url, destination):
         data = requests.get(url)
         soup = BeautifulSoup(data.text, 'html.parser')
 
-        for img in soup.find_all('img'):
-            src = urljoin(url, img['src'])
-            img_data = requests.get(src).content
-            file_path, extension = path.splitext(remove_schema_from_url(src))
-            file_name = f'{sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
-                        f'{extension}'
-            img_file_path = path.join(file_folder_path, file_name)
-
-            img['src'] = path.join(file_folder_name, file_name)
-
-            with open(img_file_path, 'bw+') as img_file:
-                img_file.write(img_data)
+        download_files(url, soup, 'img', 'src', file_folder_path, True)
+        download_files(url, soup, 'link', 'href', file_folder_path)
+        download_files(url, soup, 'script', 'src', file_folder_path)
 
         file.write(soup.prettify())
 
