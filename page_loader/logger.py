@@ -3,6 +3,7 @@ import logging.config
 
 logging_config = dict(
     version=1,
+    disable_existing_loggers=False,
     formatters={
         'format': {
             'format': '[%(asctime)s][%(name)s][%(levelname)s]: %(message)s'
@@ -12,12 +13,12 @@ logging_config = dict(
         'handler': {
             'class': 'logging.StreamHandler',
             'formatter': 'format',
-            'level': logging.DEBUG
+            'level': logging.INFO
         }
     },
     root={
         'handlers': ['handler'],
-        'level': logging.DEBUG,
+        'level': logging.INFO,
     },
 )
 

@@ -1,12 +1,18 @@
-import argparse
+import sys
 
 from page_loader import download
+from page_loader.cli import parse_args
+from page_loader.exceptions import PageLoaderError
+from page_loader.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Download web page')
-    parser.add_argument('url', type=str)
-    parser.add_argument('--output', type=str)
-    args = parser.parse_args()
+    url, output = parse_args()
 
-    download(args.url, args.output)
+    try:
+        download(url, output)
+    except PageLoaderError as e:
+        logger.error(e)
+        sys.exit(e.error_number)

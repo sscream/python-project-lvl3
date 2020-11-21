@@ -2,12 +2,14 @@ import os
 import pathlib
 import tempfile
 
+import pytest
 import requests_mock
 from bs4 import BeautifulSoup
 
-from page_loader import download
+from page_loader import download, exceptions
 
 FIXTURES_FOLDER = pathlib.Path(__file__).parent.absolute().joinpath('fixtures')
+HOST = 'http://some.ru'
 
 
 def _read_file(*path_parts, mode='r'):
@@ -20,13 +22,36 @@ def _assert_html_files_equal(file1_data, file2_data):
            == BeautifulSoup(file2_data, 'html.parser').prettify()
 
 
-def test_page_loader():
-    host = 'http://some.ru'
+def test_invalid_url():
+    with pytest.raises(exceptions.MissingSchema):
+        download('1.com', 'destination')
 
-    url = f'{host}/site'
-    img_url = f'{host}/assets/img.png'
-    css_url = f'{host}/assets/application.css'
-    js_url = f'{host}/assets/runtime.js'
+
+def test_invalid_destination():
+    with pytest.raises(exceptions.DestinationNotADirectoryError):
+        with tempfile.NamedTemporaryFile() as tmpfile:
+            download(HOST, tmpfile.name)
+
+    with pytest.raises(exceptions.PermissionDenied):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.chmod(tmpdir, 400)
+            download(HOST, tmpdir)
+
+
+@pytest.mark.parametrize('status_code', [400, 500])
+def test_invalid_response(status_code):
+    with requests_mock.Mocker() as mock:
+        mock.get(HOST, status_code=status_code)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(exceptions.HttpError):
+                download(HOST, tmpdir)
+
+
+def test_page_loader():
+    url = f'{HOST}/site'
+    img_url = f'{HOST}/assets/img.png'
+    css_url = f'{HOST}/assets/application.css'
+    js_url = f'{HOST}/assets/runtime.js'
 
     web_page_data = _read_file(FIXTURES_FOLDER, 'web_page.html')
     img_data = _read_file(FIXTURES_FOLDER, 'assets', 'img.png', mode='rb')
