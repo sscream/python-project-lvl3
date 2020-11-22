@@ -106,15 +106,16 @@ def download(url, destination, resources_to_download=None):
     )
 
     try:
-        pathlib.Path(file_folder_path).mkdir(parents=True, exist_ok=True)
+        data = perform_request(url)
 
         with open(output_file_path, 'w') as file:
-            data = perform_request(url)
             soup = BeautifulSoup(data.text, 'html.parser')
 
             local_resources = _retrieve_local_resources(
                 soup, url, resources_to_download
             )
+
+            pathlib.Path(file_folder_path).mkdir(parents=True, exist_ok=True)
 
             with Bar('Processing', max=len(local_resources) + 1) as bar:
                 for resource in local_resources:
@@ -138,6 +139,8 @@ def download(url, destination, resources_to_download=None):
         raise exceptions.HttpError(e.args[0]) from e
     except requests.exceptions.MissingSchema as e:
         raise exceptions.MissingSchema(e) from e
+    except requests.exceptions.ConnectionError as e:
+        raise exceptions.ConnectionError(e) from e
     except requests.exceptions.RequestException as e:
         raise exceptions.RequestError('URL is unreachable') from e
     except PermissionError as e:
@@ -147,6 +150,10 @@ def download(url, destination, resources_to_download=None):
     except NotADirectoryError as e:
         raise exceptions.DestinationNotADirectoryError(
             'Destination is not a directory'
+        ) from e
+    except FileNotFoundError as e:
+        raise exceptions.DirectoryNotFound(
+            'Destination directory not found'
         ) from e
 
     return output_file_path

@@ -22,6 +22,6 @@ def main():
     except PageLoaderError as e:
         logger.error(e)
         sys.exit(e.error_number)
-    except Exception:
-        logger.critical('Something went wrong')
+    except Exception as e:
+        logger.critical(e)
         sys.exit(1)
