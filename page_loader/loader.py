@@ -47,7 +47,7 @@ def _filter_by_elements(soup, resources_attributes_map):
     )
 
 
-def _retrieve_local_resources(soup, site_url, resource_attributes):
+def _retrieve_local_resources(soup, page_url, resource_attributes):
     local_resources = []
 
     def _cut_string(string, limit=100):
@@ -57,9 +57,9 @@ def _retrieve_local_resources(soup, site_url, resource_attributes):
 
     for resource in _filter_by_elements(soup, resource_attributes):
         src_attribute = resource_attributes[resource.name]
-        absolute_url = urljoin(site_url, resource[src_attribute])
+        absolute_url = urljoin(page_url, resource[src_attribute])
 
-        if not urlparse(site_url).netloc == urlparse(absolute_url).netloc:
+        if not urlparse(page_url).netloc == urlparse(absolute_url).netloc:
             logger.warning(
                 'Element "%s" is external, skipping',
                 _cut_string(str(resource), 200)
@@ -71,7 +71,7 @@ def _retrieve_local_resources(soup, site_url, resource_attributes):
     return local_resources
 
 
-def _download_resource(resource_url, destination):
+def _download_resource(page_url, resource_url, destination):
     file_folder_name = path.split(destination)[-1]
 
     parsed_url = urlparse(resource_url)
@@ -81,6 +81,10 @@ def _download_resource(resource_url, destination):
     file_path, extension = path.splitext(
         f'{parsed_url.netloc}{parsed_url.path}'
     )
+
+    if resource_url == page_url:
+        extension = '.html'
+
     file_name = f'{_sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
                 f'{extension}'
     file_path = path.join(destination, file_name)
@@ -123,6 +127,7 @@ def download(url, destination, resources_to_download=None):
                     absolute_url = urljoin(url, resource[src_attribute])
 
                     local_resource_url = _download_resource(
+                        page_url=url,
                         resource_url=absolute_url,
                         destination=file_folder_path
                     )
