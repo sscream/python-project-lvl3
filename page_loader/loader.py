@@ -1,3 +1,4 @@
+import logging
 import pathlib
 import re
 from os import path
@@ -5,14 +6,20 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from progress.bar import Bar
 
 from page_loader import exceptions
-from .logger import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 FILES_FOLDER_POSTFIX = '_files'
 FILENAME_MAX_LENGTH = 255
+
+RESOURCE_ELEMENTS_ATTRIBUTES_MAP = {
+    'img': 'src',
+    'link': 'href',
+    'script': 'src'
+}
 
 
 def perform_request(url):
@@ -22,63 +29,76 @@ def perform_request(url):
     return response
 
 
-def sanitize_string(string):
+def _sanitize_string(string):
+    """
+    Replace all non-alphanumeric characters to hyphens
+    :param string:
+    :return:
+    """
     pattern = r'[^\d\w]'
     return f"{re.sub(pattern, '-', string)}"
 
 
-def is_local_resource(page_url, resource_url):
-    return urlparse(page_url).netloc == urlparse(resource_url).netloc
+def _filter_by_elements(soup, resources_attributes_map):
+    return soup.find_all(
+        lambda element:
+            element.name in resources_attributes_map
+            and element.get(resources_attributes_map[element.name])
+    )
 
 
-def cut_string(string, limit):
-    if len(string) > limit:
-        return f'{string[:100]}...'
-    return string
+def _retrieve_local_resources(soup, site_url, resource_attributes):
+    local_resources = []
 
+    def _cut_string(string, limit=100):
+        if len(string) > limit:
+            return f'{string[:100]}...'
+        return string
 
-def download_files(page_url, soup, tag, src_attribute, file_folder_path):
-    file_folder_name = path.split(file_folder_path)[-1]
+    for resource in _filter_by_elements(soup, resource_attributes):
+        src_attribute = resource_attributes[resource.name]
+        absolute_url = urljoin(site_url, resource[src_attribute])
 
-    for element in soup.find_all(tag):
-        if not element.has_attr(src_attribute):
-            logger.warning(
-                'Element "%s" has no source attribute, skipping',
-                cut_string(str(element), 100)
-            )
-            continue
-
-        absolute_url = urljoin(page_url, element[src_attribute])
-
-        if not is_local_resource(page_url, absolute_url):
+        if not urlparse(site_url).netloc == urlparse(absolute_url).netloc:
             logger.warning(
                 'Element "%s" is external, skipping',
-                cut_string(str(element), 200)
+                _cut_string(str(resource), 200)
             )
             continue
 
-        parsed_url = urlparse(absolute_url)
-        response = perform_request(absolute_url)
-        file_data = response.content
+        local_resources.append(resource)
 
-        file_path, extension = path.splitext(
-            f'{parsed_url.netloc}{parsed_url.path}'
-        )
-        file_name = f'{sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
-                    f'{extension}'
-        file_path = path.join(file_folder_path, file_name)
-
-        element[src_attribute] = path.join(file_folder_name, file_name)
-
-        with open(file_path, 'wb') as file:
-            file.write(file_data)
-            logger.info('Saving asset %s', file_path)
+    return local_resources
 
 
-def download(url, destination):
+def _download_resource(resource_url, destination):
+    file_folder_name = path.split(destination)[-1]
+
+    parsed_url = urlparse(resource_url)
+    response = perform_request(resource_url)
+    file_data = response.content
+
+    file_path, extension = path.splitext(
+        f'{parsed_url.netloc}{parsed_url.path}'
+    )
+    file_name = f'{_sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
+                f'{extension}'
+    file_path = path.join(destination, file_name)
+
+    with open(file_path, 'wb') as file:
+        file.write(file_data)
+        logger.info('Saving asset %s', file_path)
+
+    return path.join(file_folder_name, file_name)
+
+
+def download(url, destination, resources_to_download=None):
+    if resources_to_download is None:
+        resources_to_download = RESOURCE_ELEMENTS_ATTRIBUTES_MAP
+
     parsed_url = urlparse(url)
     url_without_scheme = f'{parsed_url.netloc}{parsed_url.path}'
-    site_name = sanitize_string(url_without_scheme)
+    site_name = _sanitize_string(url_without_scheme)
     output_file_path = f'{path.join(destination, site_name)}.html'
     file_folder_path = path.join(
         destination,
@@ -92,13 +112,27 @@ def download(url, destination):
             data = perform_request(url)
             soup = BeautifulSoup(data.text, 'html.parser')
 
-            download_files(url, soup, 'img', 'src', file_folder_path)
-            download_files(url, soup, 'link', 'href', file_folder_path)
-            download_files(url, soup, 'script', 'src', file_folder_path)
+            local_resources = _retrieve_local_resources(
+                soup, url, resources_to_download
+            )
 
-            file.write(soup.prettify())
+            with Bar('Processing', max=len(local_resources) + 1) as bar:
+                for resource in local_resources:
+                    src_attribute = resources_to_download[resource.name]
+                    absolute_url = urljoin(url, resource[src_attribute])
 
-            logger.info('Saving page %s', output_file_path)
+                    local_resource_url = _download_resource(
+                        resource_url=absolute_url,
+                        destination=file_folder_path
+                    )
+
+                    resource[src_attribute] = local_resource_url
+                    bar.next()
+
+                file.write(soup.prettify())
+                bar.next()
+
+                logger.info('Saving page %s', output_file_path)
 
     except requests.exceptions.HTTPError as e:
         raise exceptions.HttpError(e.args[0]) from e

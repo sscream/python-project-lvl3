@@ -2,7 +2,7 @@ lint:
 	poetry run flake8 page_loader tests
 
 test:
-	poetry run pytest tests -qs
+	poetry run pytest tests -q
 
 check: lint test
 

@@ -1,15 +1,21 @@
+import logging
 import sys
 
 from page_loader import download
 from page_loader.cli import parse_args
 from page_loader.exceptions import PageLoaderError
-from page_loader.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 def main():
-    url, output = parse_args()
+    url, output, log_level = parse_args()
+
+    logging.basicConfig(
+        level=logging.getLevelName(log_level),
+        format='[%(asctime)s][%(name)s][%(levelname)s]: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+    logger = logging.getLogger(__name__)
 
     try:
         download(url, output)
