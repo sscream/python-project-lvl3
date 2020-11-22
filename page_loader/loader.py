@@ -130,7 +130,7 @@ def download(url, destination, resources_to_download=None):
                     resource[src_attribute] = local_resource_url
                     bar.next()
 
-                file.write(soup.prettify())
+                file.write(soup.prettify(formatter='html5'))
                 bar.next()
 
                 logger.info('Saving page %s', output_file_path)
