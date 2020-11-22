@@ -1,25 +1,27 @@
 import errno
 
+from requests import exceptions
+
 
 class PageLoaderError(Exception):
     error_number = errno.EPERM
 
 
-class HttpError(PageLoaderError):
+class RequestError(PageLoaderError, exceptions.RequestException):
     pass
 
 
-class MissingSchema(PageLoaderError):
+class HttpError(RequestError, exceptions.HTTPError):
     pass
 
 
-class RequestError(PageLoaderError):
+class MissingSchema(RequestError, exceptions.MissingSchema):
     pass
 
 
-class DestinationNotADirectoryError(PageLoaderError):
+class DestinationNotADirectoryError(PageLoaderError, NotADirectoryError):
     error_number = errno.ENOTDIR
 
 
-class PermissionDenied(PageLoaderError):
+class PermissionDenied(PageLoaderError, PermissionError):
     error_number = errno.EACCES
