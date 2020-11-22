@@ -13,7 +13,7 @@ def sanitize_string(string):
     :return:
     """
     pattern = r'[^\d\w]'
-    return f"{re.sub(pattern, '-', string)}"
+    return f"{re.sub(pattern, '-', string.rstrip('/'))}"
 
 
 def handle_errors(func):  # noqa: C901
