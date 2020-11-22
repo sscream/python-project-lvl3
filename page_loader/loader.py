@@ -1,6 +1,7 @@
 import logging
 import pathlib
 import re
+from functools import wraps
 from os import path
 from urllib.parse import urljoin, urlparse
 
@@ -22,7 +23,36 @@ RESOURCE_ELEMENTS_ATTRIBUTES_MAP = {
 }
 
 
-def perform_request(url):
+def _handle_errors(func):  # noqa: C901
+    @wraps(func)
+    def inner(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except requests.exceptions.HTTPError as e:
+            raise exceptions.HttpError(e.args[0]) from e
+        except requests.exceptions.MissingSchema as e:
+            raise exceptions.MissingSchema(e) from e
+        except requests.exceptions.ConnectionError as e:
+            raise exceptions.ConnectionError(e) from e
+        except requests.exceptions.RequestException as e:
+            raise exceptions.RequestError('URL is unreachable') from e
+        except PermissionError as e:
+            raise exceptions.PermissionDenied(
+                'Can not get access to destination folder, permission denied'
+            ) from e
+        except NotADirectoryError as e:
+            raise exceptions.DestinationNotADirectoryError(
+                'Destination is not a directory'
+            ) from e
+        except FileNotFoundError as e:
+            raise exceptions.DirectoryNotFound(
+                'Destination directory not found'
+            ) from e
+
+    return inner
+
+
+def _perform_request(url):
     response = requests.get(url)
     response.raise_for_status()
 
@@ -42,8 +72,9 @@ def _sanitize_string(string):
 def _filter_by_elements(soup, resources_attributes_map):
     return soup.find_all(
         lambda element:
-            element.name in resources_attributes_map
-            and element.get(resources_attributes_map[element.name])
+            element.name in resources_attributes_map and element.get(
+                resources_attributes_map[element.name]
+            )
     )
 
 
@@ -75,7 +106,7 @@ def _download_resource(page_url, resource_url, destination):
     file_folder_name = path.split(destination)[-1]
 
     parsed_url = urlparse(resource_url)
-    response = perform_request(resource_url)
+    response = _perform_request(resource_url)
     file_data = response.content
 
     file_path, extension = path.splitext(
@@ -96,6 +127,7 @@ def _download_resource(page_url, resource_url, destination):
     return path.join(file_folder_name, file_name)
 
 
+@_handle_errors
 def download(url, destination, resources_to_download=None):
     if resources_to_download is None:
         resources_to_download = RESOURCE_ELEMENTS_ATTRIBUTES_MAP
@@ -109,56 +141,34 @@ def download(url, destination, resources_to_download=None):
         f'{site_name}{FILES_FOLDER_POSTFIX}'
     )
 
-    try:
-        data = perform_request(url)
+    data = _perform_request(url)
 
-        with open(output_file_path, 'w') as file:
-            soup = BeautifulSoup(data.text, 'html.parser')
+    with open(output_file_path, 'w') as file:
+        soup = BeautifulSoup(data.text, 'html.parser')
 
-            local_resources = _retrieve_local_resources(
-                soup, url, resources_to_download
-            )
+        local_resources = _retrieve_local_resources(
+            soup, url, resources_to_download
+        )
 
-            pathlib.Path(file_folder_path).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(file_folder_path).mkdir(parents=True, exist_ok=True)
 
-            with Bar('Processing', max=len(local_resources) + 1) as bar:
-                for resource in local_resources:
-                    src_attribute = resources_to_download[resource.name]
-                    absolute_url = urljoin(url, resource[src_attribute])
+        with Bar('Processing', max=len(local_resources) + 1) as bar:
+            for resource in local_resources:
+                src_attribute = resources_to_download[resource.name]
+                absolute_url = urljoin(url, resource[src_attribute])
 
-                    local_resource_url = _download_resource(
-                        page_url=url,
-                        resource_url=absolute_url,
-                        destination=file_folder_path
-                    )
+                local_resource_url = _download_resource(
+                    page_url=url,
+                    resource_url=absolute_url,
+                    destination=file_folder_path
+                )
 
-                    resource[src_attribute] = local_resource_url
-                    bar.next()
-
-                file.write(soup.prettify(formatter='html5'))
+                resource[src_attribute] = local_resource_url
                 bar.next()
 
-                logger.info('Saving page %s', output_file_path)
+            file.write(soup.prettify(formatter='html5'))
+            bar.next()
 
-    except requests.exceptions.HTTPError as e:
-        raise exceptions.HttpError(e.args[0]) from e
-    except requests.exceptions.MissingSchema as e:
-        raise exceptions.MissingSchema(e) from e
-    except requests.exceptions.ConnectionError as e:
-        raise exceptions.ConnectionError(e) from e
-    except requests.exceptions.RequestException as e:
-        raise exceptions.RequestError('URL is unreachable') from e
-    except PermissionError as e:
-        raise exceptions.PermissionDenied(
-            'Can not get access to destination folder, permission denied'
-        ) from e
-    except NotADirectoryError as e:
-        raise exceptions.DestinationNotADirectoryError(
-            'Destination is not a directory'
-        ) from e
-    except FileNotFoundError as e:
-        raise exceptions.DirectoryNotFound(
-            'Destination directory not found'
-        ) from e
+            logger.info('Saving page %s', output_file_path)
 
     return output_file_path
