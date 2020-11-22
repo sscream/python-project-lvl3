@@ -4,6 +4,7 @@ import tempfile
 
 import pytest
 import requests_mock
+import requests
 from bs4 import BeautifulSoup
 
 from page_loader import download, exceptions
@@ -27,6 +28,14 @@ def test_invalid_url():
         download('1.com', 'destination')
 
 
+def test_conection_error():
+    with requests_mock.Mocker() as mock:
+        mock.get(HOST, exc=requests.exceptions.ConnectionError)
+
+        with pytest.raises(exceptions.ConnectionError):
+            download(HOST, 'destination')
+
+
 def test_invalid_destination():
     with pytest.raises(exceptions.DestinationNotADirectoryError):
         with tempfile.NamedTemporaryFile() as tmpfile:
@@ -36,6 +45,9 @@ def test_invalid_destination():
         with tempfile.TemporaryDirectory() as tmpdir:
             os.chmod(tmpdir, 400)
             download(HOST, tmpdir)
+
+    with pytest.raises(exceptions.DirectoryNotFound):
+        download(HOST, 'tmpdir')
 
 
 @pytest.mark.parametrize('status_code', [400, 500])
