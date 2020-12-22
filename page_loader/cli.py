@@ -1,7 +1,7 @@
 import argparse
 
 
-def parse_args():
+def get_argument_parser():
     parser = argparse.ArgumentParser(description='Download web page')
     parser.add_argument('url', type=str)
     parser.add_argument('--output', type=str)
@@ -10,6 +10,5 @@ def parse_args():
         default='ERROR',
         choices=['INFO', 'DEBUG', 'WARNING']
     )
-    args = parser.parse_args()
 
-    return args.url, args.output, args.log_level
+    return parser

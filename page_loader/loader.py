@@ -11,8 +11,6 @@ from .utils import (
     perform_request
 )
 
-logger = logging.getLogger(__name__)
-
 FILES_FOLDER_POSTFIX = '_files'
 FILENAME_MAX_LENGTH = 255
 
@@ -65,7 +63,7 @@ def download(url, destination, resources_to_download=None):
             file.write(soup.prettify(formatter='html5'))
             bar.next()
 
-            logger.info('Saving page %s', output_file_path)
+            logging.info('Saving page %s', output_file_path)
 
     return output_file_path
 
@@ -92,7 +90,7 @@ def _retrieve_local_resources(soup, page_url, resource_attributes):
         absolute_url = urljoin(page_url, resource[src_attribute])
 
         if not urlparse(page_url).netloc == urlparse(absolute_url).netloc:
-            logger.warning(
+            logging.warning(
                 'Element "%s" is external, skipping',
                 _cut_string(str(resource), 200)
             )
@@ -108,7 +106,13 @@ def _download_resource(page_url, resource_url, destination):
 
     parsed_url = urlparse(resource_url)
     response = perform_request(resource_url)
-    file_data = response.content
+
+    if response.encoding is not None:
+        resource_data = response.text
+        write_mode = 'w'
+    else:
+        resource_data = response.content
+        write_mode = 'wb'
 
     file_path, extension = path.splitext(
         f'{parsed_url.netloc}{parsed_url.path}'
@@ -121,8 +125,8 @@ def _download_resource(page_url, resource_url, destination):
                 f'{extension}'
     file_path = path.join(destination, file_name)
 
-    with open(file_path, 'wb') as file:
-        file.write(file_data)
-        logger.info('Saving asset %s', file_path)
+    with open(file_path, write_mode) as file:
+        file.write(resource_data)
+        logging.info('Saving asset %s', file_path)
 
     return path.join(file_folder_name, file_name)

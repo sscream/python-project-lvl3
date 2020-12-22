@@ -2,26 +2,28 @@ import logging
 import sys
 
 from page_loader import download
-from page_loader.cli import parse_args
+from page_loader.cli import get_argument_parser
 from page_loader.exceptions import PageLoaderError
+from page_loader.logger import setup_logger
+
+
+def _parse_arguments():
+    argument_parser = get_argument_parser()
+    args = argument_parser.parse_args()
+
+    return args.url, args.output, args.log_level
 
 
 def main():
-    url, output, log_level = parse_args()
+    url, output, log_level = _parse_arguments()
 
-    logging.basicConfig(
-        level=logging.getLevelName(log_level),
-        format='[%(asctime)s][%(name)s][%(levelname)s]: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-    )
-
-    logger = logging.getLogger(__name__)
+    setup_logger(log_level)
 
     try:
         download(url, output)
     except PageLoaderError as e:
-        logger.error(e)
+        logging.error(e)
         sys.exit(e.error_number)
     except Exception as e:
-        logger.critical(e)
+        logging.critical(e)
         sys.exit(1)
