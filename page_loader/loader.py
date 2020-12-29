@@ -33,12 +33,17 @@ def download(url, destination, resources_to_download=None):
     modified_html_page_data, html_page_file_path, file_folder_path, resources \
         = process_results
 
-    with Bar('Processing', max=len(resources) + 1) as progress_bar:
+    resources_count = len(resources)
+
+    logging.debug('Local resources count: %s, list:', resources_count, resources)
+
+    with Bar('Processing', max=resources_count + 1) as progress_bar:
         save_html_page(modified_html_page_data, html_page_file_path)
         progress_bar.next()
 
         if resources:
             pathlib.Path(file_folder_path).mkdir(exist_ok=True)
+            logging.info('Files folder was created, path: %s', file_folder_path)
 
             for resource_url, resource_destination in resources:
                 download_resource(resource_url, resource_destination)
