@@ -36,7 +36,10 @@ def download(url, destination, resources_to_download=None):
     resources_count = len(resources)
 
     logging.debug(
-        'Local resources count: %s, list:', resources_count, resources
+        'Local resources count: %s, list: %s', resources_count, '\n\n'.join([
+            f'url: {resource_url} \ndestination: {resource_destination}'
+            for resource_url, resource_destination in resources
+        ])
     )
 
     with Bar('Processing', max=resources_count + 1) as progress_bar:
