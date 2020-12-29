@@ -1,7 +1,9 @@
+import os
 import logging
 import pathlib
 
 from progress.bar import Bar
+import requests
 
 from .page_processor import process_page
 from .request import perform_request
@@ -17,6 +19,8 @@ RESOURCE_ELEMENTS_ATTRIBUTES_MAP = {
 
 
 def download(url, destination, resources_to_download=None):
+    assert_directory_valid(destination)
+
     if resources_to_download is None:
         resources_to_download = RESOURCE_ELEMENTS_ATTRIBUTES_MAP
 
@@ -53,9 +57,24 @@ def download(url, destination, resources_to_download=None):
             )
 
             for resource_url, resource_destination in resources:
-                download_resource(resource_url, resource_destination)
+                try:
+                    download_resource(resource_url, resource_destination)
+                    logging.info('Saving asset %s', resource_destination)
+                except requests.HTTPError as e:
+                    logging.warning(str(e))
+                    continue
+
                 progress_bar.next()
 
-                logging.info('Saving asset %s', resource_destination)
-
     return html_page_file_path
+
+
+def assert_directory_valid(directory):
+    if not os.path.exists(directory):
+        raise FileNotFoundError(f'No such file or directory: `{directory}`')
+
+    if not os.path.isdir(directory):
+        raise NotADirectoryError(f'Not a directory: `{directory}`')
+
+    if not os.access(directory, os.W_OK):
+        raise PermissionError(f'Read-only file system: `{directory}`')

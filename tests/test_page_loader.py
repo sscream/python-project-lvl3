@@ -25,16 +25,18 @@ def _assert_html_files_equal(file1_data, file2_data):
 
 
 def test_invalid_url():
-    with pytest.raises(requests.exceptions.MissingSchema):
-        download('1.com', 'destination')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(requests.exceptions.MissingSchema):
+            download('1.com', tmpdir)
 
 
 def test_conection_error():
     with requests_mock.Mocker() as mock:
         mock.get(HOST, exc=requests.exceptions.ConnectionError)
 
-        with pytest.raises(requests.exceptions.ConnectionError):
-            download(HOST, 'destination')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(requests.exceptions.ConnectionError):
+                download(HOST, tmpdir)
 
 
 def test_invalid_destination():
