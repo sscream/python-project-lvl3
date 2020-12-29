@@ -8,7 +8,7 @@ import requests_mock
 from bs4 import BeautifulSoup
 
 from page_loader import download
-from page_loader.page_processor import process_page
+from page_loader.page_processor import process_page, _sanitize_string
 
 FIXTURES_FOLDER = pathlib.Path(__file__).parent.absolute().joinpath('fixtures')
 HOST = 'http://some.ru'
@@ -127,3 +127,8 @@ def test_page_loader():
                 _read_file(file_path),
                 _read_file(FIXTURES_FOLDER, 'expected_web_page.html')
             )
+
+
+def test_string_sanitizer():
+    assert _sanitize_string('web/page.ru') == 'web-page-ru'
+    assert _sanitize_string('some#web!page.ru') == 'some-web-page-ru'
