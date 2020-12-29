@@ -1,18 +1,13 @@
 import logging
 import pathlib
-from os import path
-from urllib.parse import urljoin, urlparse
 
-from bs4 import BeautifulSoup
 from progress.bar import Bar
-from .utils import (
-    handle_errors,
-    sanitize_string,
-    perform_request
-)
+
+from .page_processor import process_page
+from .request import perform_request
+from .storage import save_html_page, download_resource
 
 FILES_FOLDER_POSTFIX = '_files'
-FILENAME_MAX_LENGTH = 255
 
 RESOURCE_ELEMENTS_ATTRIBUTES_MAP = {
     'img': 'src',
@@ -21,112 +16,34 @@ RESOURCE_ELEMENTS_ATTRIBUTES_MAP = {
 }
 
 
-@handle_errors
 def download(url, destination, resources_to_download=None):
     if resources_to_download is None:
         resources_to_download = RESOURCE_ELEMENTS_ATTRIBUTES_MAP
 
-    parsed_url = urlparse(url)
-    url_without_scheme = f'{parsed_url.netloc}{parsed_url.path}'
-    site_name = sanitize_string(url_without_scheme)
-    output_file_path = f'{path.join(destination, site_name)}.html'
-    file_folder_path = path.join(
-        destination,
-        f'{site_name}{FILES_FOLDER_POSTFIX}'
+    html_page_data = perform_request(url).text
+
+    process_results = process_page(
+        html=html_page_data,
+        page_url=url,
+        destination=destination,
+        files_folder_name_postfix=FILES_FOLDER_POSTFIX,
+        resources_to_download=resources_to_download
     )
 
-    data = perform_request(url)
+    modified_html_page_data, html_page_file_path, file_folder_path, resources \
+        = process_results
 
-    with open(output_file_path, 'w') as file:
-        soup = BeautifulSoup(data.text, 'html.parser')
+    with Bar('Processing', max=len(resources) + 1) as progress_bar:
+        save_html_page(modified_html_page_data, html_page_file_path)
+        progress_bar.next()
 
-        local_resources = _retrieve_local_resources(
-            soup, url, resources_to_download
-        )
+        if resources:
+            pathlib.Path(file_folder_path).mkdir(exist_ok=True)
 
-        pathlib.Path(file_folder_path).mkdir(parents=True, exist_ok=True)
+            for resource_url, resource_destination in resources:
+                download_resource(resource_url, resource_destination)
+                progress_bar.next()
 
-        with Bar('Processing', max=len(local_resources) + 1) as bar:
-            for resource in local_resources:
-                src_attribute = resources_to_download[resource.name]
-                absolute_url = urljoin(url, resource[src_attribute])
+                logging.info('Saving asset %s', resource_destination)
 
-                local_resource_url = _download_resource(
-                    page_url=url,
-                    resource_url=absolute_url,
-                    destination=file_folder_path
-                )
-
-                resource[src_attribute] = local_resource_url
-                bar.next()
-
-            file.write(soup.prettify(formatter='html5'))
-            bar.next()
-
-            logging.info('Saving page %s', output_file_path)
-
-    return output_file_path
-
-
-def _filter_by_elements(soup, resources_attributes_map):
-    return soup.find_all(
-        lambda element:
-            element.name in resources_attributes_map and element.get(
-                resources_attributes_map[element.name]
-            )
-    )
-
-
-def _retrieve_local_resources(soup, page_url, resource_attributes):
-    local_resources = []
-
-    def _cut_string(string, limit=100):
-        if len(string) > limit:
-            return f'{string[:100]}...'
-        return string
-
-    for resource in _filter_by_elements(soup, resource_attributes):
-        src_attribute = resource_attributes[resource.name]
-        absolute_url = urljoin(page_url, resource[src_attribute])
-
-        if not urlparse(page_url).netloc == urlparse(absolute_url).netloc:
-            logging.warning(
-                'Element "%s" is external, skipping',
-                _cut_string(str(resource), 200)
-            )
-            continue
-
-        local_resources.append(resource)
-
-    return local_resources
-
-
-def _download_resource(page_url, resource_url, destination):
-    file_folder_name = path.split(destination)[-1]
-
-    parsed_url = urlparse(resource_url)
-    response = perform_request(resource_url)
-
-    if response.encoding is not None:
-        resource_data = response.text
-        write_mode = 'w'
-    else:
-        resource_data = response.content
-        write_mode = 'wb'
-
-    file_path, extension = path.splitext(
-        f'{parsed_url.netloc}{parsed_url.path}'
-    )
-
-    if resource_url == page_url:
-        extension = '.html'
-
-    file_name = f'{sanitize_string(file_path)[:FILENAME_MAX_LENGTH]}' \
-                f'{extension}'
-    file_path = path.join(destination, file_name)
-
-    with open(file_path, write_mode) as file:
-        file.write(resource_data)
-        logging.info('Saving asset %s', file_path)
-
-    return path.join(file_folder_name, file_name)
+    return html_page_file_path
